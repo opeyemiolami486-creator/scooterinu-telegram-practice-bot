@@ -97,6 +97,16 @@ async def run_planner(seed: int, minimum: int, maximum: int, timeout: float = 60
     return result
 
 
+def classify_server_score(server_score: Any, expected: int, minimum: int, maximum: int) -> str:
+    if isinstance(server_score, bool) or not isinstance(server_score, int):
+        return "missing"
+    if not minimum <= server_score <= maximum:
+        return "out_of_range"
+    if server_score != expected:
+        return "in_range_mismatch"
+    return "match"
+
+
 class ScooterTelegramBot:
     def __init__(self, token: str, base_url: str, data_dir: str, allowed_chat: str = ""):
         self.telegram_url = f"https://api.telegram.org/bot{token}"
@@ -173,7 +183,7 @@ class ScooterTelegramBot:
                     return
                 if known_name is None:
                     self.identity.bind(telegram_user, remote_name)
-            await self.send(chat_id, f"Starting Scooter Inu runs for @{name}, target {minimum}-{maximum}. Only a server-accepted run in that range will be submitted; use /stop to cancel.")
+            await self.send(chat_id, f"Starting Scooter Inu runs for @{name}, target {minimum}-{maximum}. The server's score may differ from the local prediction; if so, the game may already have recorded it before the bot can detect the mismatch. The bot will alert you and stop. Use /stop to cancel.")
             closest: dict[str, Any] | None = None
             for attempt in range(1, self.max_attempts + 1):
                 run = await self.begin_run(client, chat_id)
@@ -186,9 +196,19 @@ class ScooterTelegramBot:
                 if not result.get("matched"):
                     await self.send(chat_id, f"Seed {run['seed']}: planner predicts {result['score']} points, outside {minimum}-{maximum}; no score was submitted.")
                     continue
+                predicted_score = result.get("score")
+                frames = result.get("frames")
+                events = result.get("events")
+                if (isinstance(predicted_score, bool) or not isinstance(predicted_score, int)
+                        or not minimum <= predicted_score <= maximum
+                        or result.get("survived") is not False
+                        or isinstance(frames, bool) or not isinstance(frames, int) or frames <= 0
+                        or not isinstance(events, list) or not events):
+                    await self.send(chat_id, f"Safety stop: planner output for seed {run['seed']} did not pass range/terminal-run checks; nothing was submitted.")
+                    return
                 duration = result["frames"] / 60.0
                 remaining_duration = max(0.0, duration - (time.monotonic() - run_started_at))
-                await self.send(chat_id, f"Seed {run['seed']} has a {result['score']}-point in-range route. Letting the run play out for about {remaining_duration:.0f}s before submission…")
+                await self.send(chat_id, f"Seed {run['seed']}: planner predicts {predicted_score} points ({minimum}-{maximum}); replay is {frames} frames / {len(events)} inputs. Letting the run play out for about {remaining_duration:.0f}s before submission…")
                 deadline = time.monotonic() + remaining_duration
                 while True:
                     remaining = deadline - time.monotonic()
@@ -199,15 +219,23 @@ class ScooterTelegramBot:
                     if left and left % 60 < 30:
                         await self.send(chat_id, f"Run is in progress; about {left}s remaining before score submission.")
                 submitted = await client.submit_score(run["token"], result["events"], result["score"], name)
-                server_score = submitted.get("score", result["score"])
-                if isinstance(server_score, bool) or not isinstance(server_score, int):
-                    server_score = result["score"]
+                server_score = submitted.get("score")
                 accepted_name = submitted.get("name")
                 if isinstance(accepted_name, str) and accepted_name.casefold() != name.casefold():
                     await self.send(chat_id, f"The game accepted {server_score} points under the device's existing name @{accepted_name}, not @{name}; check the device binding before using this bot again.")
                     return
                 if self.identity.get(telegram_user) is None:
                     self.identity.bind(telegram_user, name)
+                score_status = classify_server_score(server_score, predicted_score, minimum, maximum)
+                if score_status == "out_of_range":
+                    await self.send(chat_id, f"CRITICAL SCORE MISMATCH — not a successful target run. Scooter Inu already accepted and posted {server_score} points, outside {minimum}-{maximum}; the bot has stopped and will not retry. Local prediction was {predicted_score}; seed={run['seed']}, frames={frames}, inputs={len(events)}. The bot cannot undo a score already accepted by the game.")
+                    return
+                if score_status == "missing":
+                    await self.send(chat_id, f"Score submission response did not include an authoritative integer score. Local prediction was {predicted_score}; seed={run['seed']}, frames={frames}. Treat the result as unverified; the bot has stopped.")
+                    return
+                if score_status == "in_range_mismatch":
+                    await self.send(chat_id, f"Score accepted for @{name}: {server_score} points, within {minimum}-{maximum}. Note: the server score differs from the local prediction {predicted_score}; seed={run['seed']}, frames={frames}, inputs={len(events)}.\nRank: {submitted.get('rank', 'not shown')}\nAttempts: {attempt}.")
+                    return
                 await self.send(chat_id, f"Score accepted for @{name}: {server_score} points (requested {minimum}-{maximum}).\nRank: {submitted.get('rank', 'not shown')}\nAttempts: {attempt}.")
                 return
             summary = f"No in-range server run after {self.max_attempts} attempts. Nothing was submitted."

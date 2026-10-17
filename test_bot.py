@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from telegram_scooter_bot import IdentityStore, parse_play
+from telegram_scooter_bot import IdentityStore, classify_server_score, parse_play
 
 
 class ParsePlayTests(unittest.TestCase):
@@ -15,6 +15,14 @@ class ParsePlayTests(unittest.TestCase):
                 self.assertIsNone(parse_play(text))
         with self.assertRaisesRegex(ValueError, 'upper score bound'):
             parse_play('/play @rider 1000-800')
+
+
+class ServerScoreTests(unittest.TestCase):
+    def test_out_of_range_server_score_is_not_a_success(self):
+        self.assertEqual(classify_server_score(54, 8504, 8500, 10000), 'out_of_range')
+        self.assertEqual(classify_server_score(8504, 8504, 8500, 10000), 'match')
+        self.assertEqual(classify_server_score(8510, 8504, 8500, 10000), 'in_range_mismatch')
+        self.assertEqual(classify_server_score(None, 8504, 8500, 10000), 'missing')
 
 
 class IdentityStoreTests(unittest.TestCase):

@@ -149,6 +149,23 @@ function simulatePolicy(seed, minimum, maximum, policy, maxFrames = 120000) {
   }
   return { seed: seed >>> 0, score: score(s.distance), distance: Math.floor(s.distance), frames: s.frame, survived: true, events, matched: false, policy, timedOut: true };
 }
+function simulateEvents(seed, events, maxFrames = 120000) {
+  const s = createState(seed);
+  let index = 0;
+  for (let frame = 0; frame < maxFrames; frame++) {
+    while (index < events.length && events[index].f === frame) {
+      applyInput(s, events[index].a);
+      index++;
+    }
+    if (index < events.length && events[index].f < frame) {
+      throw new Error(`Event ${index} is out of frame order.`);
+    }
+    if (step(s)) {
+      return { seed: seed >>> 0, score: score(s.distance), frames: s.frame, survived: false };
+    }
+  }
+  return { seed: seed >>> 0, score: score(s.distance), frames: s.frame, survived: s.status !== 'over' };
+}
 function planRun(seed, minimum, maximum, options = {}) {
   if (!Number.isSafeInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error('Seed must be an unsigned 32-bit integer.');
   if (!Number.isSafeInteger(minimum) || !Number.isSafeInteger(maximum) || minimum < 0 || maximum < minimum) throw new Error('Use a valid inclusive score range, e.g. 800-1000.');
@@ -161,7 +178,13 @@ function planRun(seed, minimum, maximum, options = {}) {
       policyTests++;
       const result = simulatePolicy(seed, minimum, maximum, { holdFrames, triggerX }, options.maxFrames ?? 120000);
       if (!best || Math.abs(result.score - (minimum + maximum) / 2) < Math.abs(best.score - (minimum + maximum) / 2)) best = result;
-      if (result.matched) return { ...result, policyTests };
+      if (result.matched) {
+        const replay = simulateEvents(seed, result.events, options.maxFrames ?? 120000);
+        if (replay.survived || replay.score !== result.score || replay.frames !== result.frames) {
+          throw new Error(`Serialized replay mismatch: planned ${result.score}/${result.frames}, replayed ${replay.score}/${replay.frames}.`);
+        }
+        return { ...result, policyTests };
+      }
     }
   }
   return { ...best, policyTests };
@@ -193,4 +216,4 @@ if (require.main === module) {
     }
   });
 }
-module.exports = { createState, score, simulatePolicy, planRun, search, rng32 };
+module.exports = { createState, score, simulatePolicy, simulateEvents, planRun, search, rng32 };

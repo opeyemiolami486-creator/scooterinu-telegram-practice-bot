@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { planRun, score, rng32 } = require('./scooterinu_planner');
+const { planRun, simulateEvents, score, rng32 } = require('./scooterinu_planner');
 
 assert.equal(score(40000), 1000);
 assert.deepEqual([rng32(42)(), rng32(42)()], [rng32(42)(), rng32(42)()]);
@@ -18,6 +18,8 @@ const high = planRun(42, 9000, 11000);
 assert.equal(high.matched, true, 'seed 42 must demonstrate the planner can reach 9000+');
 assert.ok(high.score >= 9000 && high.score <= 11000);
 assert.ok(high.events.length > 2);
+const replay = simulateEvents(high.seed, high.events);
+assert.deepEqual(replay, { seed: high.seed, score: high.score, frames: high.frames, survived: false });
 for (let i = 0; i < high.events.length; i++) {
   assert.ok(high.events[i].f >= 0 && high.events[i].f < high.frames);
   assert.ok([0, 1].includes(high.events[i].a));
