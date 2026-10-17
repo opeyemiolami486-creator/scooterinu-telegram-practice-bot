@@ -1,0 +1,11 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { simulate, search, score } = require('./scooterinu_planner');
+const a = simulate(42), b = simulate(42);
+assert.deepEqual(a, b, 'same seed must produce repeatable local simulation');
+assert.equal(score(40000), 1000);
+assert.ok(a.frames > 0 && a.score >= 0);
+assert.throws(() => search(100, 50), /valid inclusive score range/);
+const found = search(0, 10000, { seed: 7, maxAttempts: 1 });
+assert.equal(found.attempts, 1);
+console.log('Planner tests passed.');
