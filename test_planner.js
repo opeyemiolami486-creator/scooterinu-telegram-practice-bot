@@ -20,9 +20,11 @@ for (let i = 1; i < normal.events.length; i++) {
 }
 const replay = simulateEvents(normal.seed, normal.events);
 assert.deepEqual(replay, { seed: normal.seed, score: normal.score, frames: normal.frames, survived: false });
-const high = planRun(42, 8500, 10000);
-assert.equal(high.matched, false, 'correct physics must not repeat the obsolete high-score overestimate');
-assert.ok(high.score < 8500);
+const high = planRun(42, 10000, 11000);
+assert.equal(high.matched, true, 'the adaptive controller should plan a terminal score above 10,000');
+assert.ok(high.score > 10000 && high.score <= 11000);
+const highReplay = simulateEvents(high.seed, high.events);
+assert.deepEqual(highReplay, { seed: high.seed, score: high.score, frames: high.frames, survived: false });
 assert.throws(() => planRun(42, 100, 50), /valid inclusive score range/);
 assert.throws(() => planRun(-1, 100, 200), /unsigned 32-bit integer/);
-console.log(`Planner physics tests passed; seed 42 correctly fails closed for 9000+ (best simulation ${high.score}).`);
+console.log(`Planner physics tests passed; adaptive policy replayed seed 42 for ${high.score} points.`);

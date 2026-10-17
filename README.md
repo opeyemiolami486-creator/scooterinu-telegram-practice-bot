@@ -12,9 +12,9 @@ The chosen name is a display label; the game does not verify control of an unrel
 
 ## Controller and score expectations
 
-`scooterinu_planner.js` mirrors the runner's public client-side state update: its seeded random generator, obstacle creation, jump physics, collision boxes, and distance-based score. The speed ramp is `.001` per fixed 60 Hz tick because the client multiplies `.001` by the normalized tick factor (`dt / (1000/60) = 1`); it is not `.001 × 16.67 ms`. For each server-provided seed the planner tries a bounded set of ordinary jump timing/hold policies and independently replays any candidate transcript before marking it locally matched. The game server remains authoritative. If its returned score differs, the bot stops and reports the seed and transcript diagnostics, but cannot undo a score already recorded by the server.
+`scooterinu_planner.js` mirrors the runner's public client-side state update: its seeded random generator, obstacle creation, jump physics, collision boxes, and distance-based score. The speed ramp is `.001` per fixed 60 Hz tick because the client multiplies `.001` by the normalized tick factor (`dt / (1000/60) = 1`); it is not `.001 × 16.67 ms`. The default controller scales its trigger distance with current speed and shortens the jump release when the next obstacle is especially close. It retains the fixed-policy sweep as a fallback and independently replays any candidate transcript before marking it locally matched. The game server remains authoritative. If its returned score differs, the bot stops and reports the seed and transcript diagnostics, but cannot undo a score already recorded by the server.
 
-The earlier seed-42 estimate of 9,007 was invalid: the planner multiplied the speed ramp by milliseconds, reaching maximum speed about 16.7 times too quickly. That estimate is retracted. The corrected physics regression now fails closed for that seed at a 9,000-point target; **this controller has not demonstrated 9,000+ under the corrected timing and must not be described as hackathon-ready for that target.** A different controller policy and authoritative server/staging replay test are needed before using high-score submissions.
+The earlier seed-42 estimate of 9,007 was invalid because the planner multiplied the speed ramp by milliseconds. With the corrected timing and adaptive controller, seed 42 now has a locally replay-verified terminal plan above 10,000 points. `npm run benchmark` checks that 500 deterministic seeds survive beyond 10,000 points and produce terminal scores in the 10,000–11,000 band, then replays representative transcripts. These are simulator-only tests: the controller has not been verified against an authoritative server/staging replay, so do not treat local results as proof that a live submission will score identically.
 
 ## Setup
 
@@ -54,5 +54,8 @@ Tests use local simulations and a mock HTTP API; they do not request public run 
 ```bash
 node --check scooterinu_planner.js
 npm test
+npm run benchmark
 python3 -m unittest -v
 ```
+
+The benchmark defaults to 500 seeds, 40,000 endurance frames, and a 120,000-frame terminal-run cap. Set `BENCHMARK_SEEDS`, `BENCHMARK_FRAMES`, or `TERMINAL_MAX_FRAMES` to change the batch size or horizons.

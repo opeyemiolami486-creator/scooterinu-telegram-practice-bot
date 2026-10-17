@@ -4,5 +4,8 @@
   "version": "1.0.0",
   "description": "Scooter Inu Telegram game bot and verified run planner",
   "engines": { "node": ">=18" },
-  "scripts": { "test": "node test_planner.js" }
+  "scripts": {
+    "test": "node test_planner.js",
+    "benchmark": "node benchmark_controller.js"
+  }
 }

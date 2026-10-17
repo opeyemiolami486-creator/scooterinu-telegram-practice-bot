@@ -132,10 +132,15 @@ function simulatePolicy(seed, minimum, maximum, policy, maxFrames = 120000) {
     const currentScore = score(s.distance);
     if (currentScore >= minimum) targetReached = true;
     if (!targetReached && !s.jumping) {
-      const approaching = s.obstacles.find(o => o.x + o.type.width * o.size >= 48 && o.x <= policy.triggerX);
-      if (approaching) {
+      const triggerX = policy.triggerFrames ? s.speed * policy.triggerFrames : policy.triggerX;
+      const approachingIndex = s.obstacles.findIndex(o => o.x + o.type.width * o.size >= 48 && o.x <= triggerX);
+      if (approachingIndex >= 0) {
+        const approaching = s.obstacles[approachingIndex];
+        const next = s.obstacles[approachingIndex + 1];
+        const dense = next && policy.closeGapFrames && next.x - approaching.x <= s.speed * policy.closeGapFrames;
+        const holdFrames = dense ? policy.closeHoldFrames : policy.holdFrames;
         events.push({ f: frame, a: 0 });
-        releaseFrame = frame + policy.holdFrames;
+        releaseFrame = frame + holdFrames;
         applyInput(s, 0);
         eventIndex = events.length;
       }
@@ -172,20 +177,21 @@ function planRun(seed, minimum, maximum, options = {}) {
   if (!Number.isSafeInteger(minimum) || !Number.isSafeInteger(maximum) || minimum < 0 || maximum < minimum) throw new Error('Use a valid inclusive score range, e.g. 800-1000.');
   let best = null;
   let policyTests = 0;
+  const policies = options.adaptivePolicies ?? [
+    { holdFrames: 4, triggerFrames: 19, closeGapFrames: 28, closeHoldFrames: 3 },
+  ];
   const holds = options.holds ?? [1, 4, 7, 10, 14];
   const triggers = options.triggers ?? [125, 150, 175, 200, 225, 250, 275];
-  for (const holdFrames of holds) {
-    for (const triggerX of triggers) {
-      policyTests++;
-      const result = simulatePolicy(seed, minimum, maximum, { holdFrames, triggerX }, options.maxFrames ?? 120000);
-      if (!best || Math.abs(result.score - (minimum + maximum) / 2) < Math.abs(best.score - (minimum + maximum) / 2)) best = result;
-      if (result.matched) {
-        const replay = simulateEvents(seed, result.events, options.maxFrames ?? 120000);
-        if (replay.survived || replay.score !== result.score || replay.frames !== result.frames) {
-          throw new Error(`Serialized replay mismatch: planned ${result.score}/${result.frames}, replayed ${replay.score}/${replay.frames}.`);
-        }
-        return { ...result, policyTests };
+  for (const policy of policies.concat(holds.flatMap(holdFrames => triggers.map(triggerX => ({ holdFrames, triggerX }))))) {
+    policyTests++;
+    const result = simulatePolicy(seed, minimum, maximum, policy, options.maxFrames ?? 120000);
+    if (!best || Math.abs(result.score - (minimum + maximum) / 2) < Math.abs(best.score - (minimum + maximum) / 2)) best = result;
+    if (result.matched) {
+      const replay = simulateEvents(seed, result.events, options.maxFrames ?? 120000);
+      if (replay.survived || replay.score !== result.score || replay.frames !== result.frames) {
+        throw new Error(`Serialized replay mismatch: planned ${result.score}/${result.frames}, replayed ${replay.score}/${replay.frames}.`);
       }
+      return { ...result, policyTests };
     }
   }
   return { ...best, policyTests };
