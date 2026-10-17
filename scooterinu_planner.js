@@ -107,12 +107,13 @@ function step(s) {
   if (!lastCloud || lastCloud.x < 500 - 300 * random()) {
     s.clouds.push({ x: 600, y: 20 + 50 * random() });
   }
+  // The shipped client increments speed immediately before its collision test.
+  if (s.speed < 13) s.speed += 0.001;
   if (collides(s)) {
     s.status = 'over';
     s.frame++;
     return true;
   }
-  if (s.speed < 13) s.speed += 0.001 * FRAME_MS;
   s.frame++;
   return false;
 }
@@ -216,4 +217,4 @@ if (require.main === module) {
     }
   });
 }
-module.exports = { createState, score, simulatePolicy, simulateEvents, planRun, search, rng32 };
+module.exports = { createState, applyInput, step, score, simulatePolicy, simulateEvents, planRun, search, rng32 };
