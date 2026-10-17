@@ -1,8 +1,8 @@
 {
-  "name": "scooterinu-telegram-practice-bot",
+  "name": "scooterinu-telegram-game-bot",
   "private": true,
-  "version": "0.1.0",
-  "description": "Offline Scooter Inu runner planner for Telegram practice",
-  "engines": { "node": ">=20" },
-  "scripts": { "test": "node test_planner.js", "practice": "node scooterinu_planner.js" }
+  "version": "1.0.0",
+  "description": "Scooter Inu Telegram game bot and verified run planner",
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node test_planner.js" }
 }
